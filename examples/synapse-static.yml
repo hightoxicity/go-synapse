@@ -1,0 +1,44 @@
+
+
+apiHost: localhost
+apiPort: 8888
+
+routers:
+  - type: haproxy
+    configPath: /tmp/hap.config
+    reloadCommand: [./examples/haproxy_reload.sh]
+
+    global:
+      - maxconn 32000
+      - ulimit-n 65536
+      - daemon
+      - stats   socket  /tmp/hap.socket level admin
+
+    listen:
+      stats:
+        - mode http
+        - bind 127.0.0.1:1936
+        - stats enable
+#        - stats hide-version
+#        - stats realm Haproxy\ Statistics
+        - stats uri /
+#        - stats refresh 5s
+#        - stats auth admin:admin
+#        - timeout client  100s
+#        - timeout server  100s
+#        - timeout connect 100s
+#        - timeout queue   100s
+
+    services:
+      - watcher:
+          type: 'static'
+          name: 'test'
+        routerOptions:
+          frontend:
+            - mode tcp
+            - timeout client 31s
+            - bind 127.0.0.1:5679
+          backend:
+            - mode tcp
+            - timeout server 2m
+            - timeout connect 45s

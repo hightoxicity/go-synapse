@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-const PrometheusLabelWatch = "watch"
-
 type WatcherZookeeper struct {
 	WatcherCommon
 	Hosts          []string

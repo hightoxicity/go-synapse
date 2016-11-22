@@ -6,6 +6,8 @@ import (
 	"github.com/n0rad/go-erlog/errs"
 )
 
+const PrometheusLabelWatch = "watch"
+
 type WatcherCommon struct {
 	Type string
 
@@ -43,6 +45,8 @@ func WatcherFromJson(content []byte, service *Service) (Watcher, error) {
 	switch t.Type {
 	case "zookeeper":
 		typedWatcher = NewWatcherZookeeper()
+	case "static":
+		typedWatcher = NewWatcherStatic()
 	default:
 		return nil, errs.WithF(fields, "Unsupported watcher type")
 	}
@@ -57,7 +61,7 @@ func WatcherFromJson(content []byte, service *Service) (Watcher, error) {
 	return typedWatcher, nil
 }
 
-func (w *WatcherZookeeper) changedToReport(reportsStop <-chan struct{}, events chan<- ServiceReport, s *Service) {
+func (w *WatcherCommon) changedToReport(reportsStop <-chan struct{}, events chan<- ServiceReport, s *Service) {
 	for {
 		select {
 		case <-w.reports.changed:
