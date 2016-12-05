@@ -90,6 +90,7 @@ func (r *RouterHaProxy) isSocketUpdatable(report ServiceReport) bool {
 func (r *RouterHaProxy) Update(serviceReports []ServiceReport) error {
 	reloadNeeded := r.socketPath == ""
 	for _, report := range serviceReports {
+
 		front, back, err := r.toFrontendAndBackend(report)
 		if err != nil {
 			return errs.WithEF(err, r.RouterCommon.fields.WithField("report", report), "Failed to prepare frontend and backend")

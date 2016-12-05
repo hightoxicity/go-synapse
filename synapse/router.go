@@ -64,16 +64,27 @@ func (r *RouterCommon) RunCommon(context *ContextImpl, router Router) {
 	defer context.doneWaiter.Done()
 
 	events := make(chan ServiceReport)
-	watcherContext := newContext(context.oneshot)
-	for _, service := range r.Services {
-		go service.typedWatcher.Watch(watcherContext, events, service)
-	}
 
 	go r.eventsProcessor(events, router)
 
+	var contexts []*ContextImpl
+
+	for _, service := range r.Services {
+		for _, wt := range service.watchers {
+			watcherContext := newContext(context.oneshot)
+			contexts = append(contexts, watcherContext)
+			go wt.Watch(watcherContext, events, service)
+		}
+
+	}
+
 	<-context.stop
-	close(watcherContext.stop)
-	watcherContext.doneWaiter.Wait()
+
+	for _, ctx := range contexts {
+		close(ctx.stop)
+		ctx.doneWaiter.Wait()
+	}
+
 	logs.WithF(r.fields).Debug("All Watchers stopped")
 	close(events)
 }

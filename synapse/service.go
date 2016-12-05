@@ -7,6 +7,7 @@ import (
 	"github.com/n0rad/go-erlog/errs"
 	"github.com/n0rad/go-erlog/logs"
 	"sync"
+	//	"fmt"
 )
 
 type ServiceReport struct {
@@ -65,17 +66,21 @@ type ServerCorrelation struct {
 type Service struct {
 	Name              string
 	Watcher           json.RawMessage
+	Servers           json.RawMessage
 	RouterOptions     json.RawMessage
 	ServerOptions     json.RawMessage
 	ServerSort        ReportSortType
 	ServerCorrelation ServerCorrelation
 
-	reported           bool
-	id                 int
-	router             Router
-	synapse            *Synapse
-	fields             data.Fields
-	typedWatcher       Watcher
+	reported bool
+	id       int
+	router   Router
+	synapse  *Synapse
+	fields   data.Fields
+
+	watchers []Watcher
+
+	//typedWatcher       Watcher
 	typedRouterOptions interface{}
 	typedServerOptions interface{}
 }
@@ -93,14 +98,69 @@ func (s *Service) Init(router Router, synapse *Synapse) error {
 	s.router = router
 	s.synapse = synapse
 	s.fields = router.getFields().WithField("service", s.Name)
-	watcher, err := WatcherFromJson(s.Watcher, s)
-	if err != nil {
-		return errs.WithEF(err, s.fields, "Failed to read watcher")
+
+	if s.Servers == nil {
+		logs.WithF(s.fields).Warn("servers key now expected into json")
+
+		watcher, err := WatcherFromJson(s.Watcher, s)
+		if err != nil {
+			return errs.WithEF(err, s.fields, "Failed to read watcher")
+		}
+
+		s.watchers = append(s.watchers, watcher)
+	} else {
+		var elt interface{}
+		err := json.Unmarshal(s.Servers, &elt)
+		if err != nil {
+			return errs.WithEF(err, s.fields, "Failed to parse servers config")
+		}
+		m := elt.(map[string]interface{})
+
+		for _, watcher := range m["watchers"].([]interface{}) {
+			watcherSpec := watcher.(map[string]interface{})
+			mWatcher, _ := json.Marshal(watcherSpec["watcher"])
+			typedWatcher, err := WatcherFromJson(mWatcher, s)
+			if err != nil {
+				return errs.WithEF(err, s.fields, "Failed to read watcher")
+			}
+			s.watchers = append(s.watchers, typedWatcher)
+		}
 	}
-	logs.WithF(watcher.GetFields()).Debug("Watcher loaded")
-	s.typedWatcher = watcher
-	if err := s.typedWatcher.Init(s); err != nil {
-		return errs.WithEF(err, s.fields, "Failed to init watcher")
+	/*
+	   	var elt interface{}
+	   	err := json.Unmarshal(s.Watcher, &elt)
+	           if err != nil {
+	   		return errs.WithEF(err, s.fields, "Failed to parse watchers config")
+	           }
+	   	m := elt.(map[string]interface{})
+
+	   	_, isWatcher := m["watcher"]
+
+	   //fmt.Printf("%#v\n", elt)
+	   //fmt.Printf("%#v\n", s.Watcher)
+	   //fmt.Printf("%#v\n", s.Servers)
+
+	   	if isWatcher == true {
+	   		logs.WithF(s.fields).Warn("Deprecated use: you should use servers instead of watcher")
+	   	}
+	*/
+	/*
+		watcher, err := WatcherFromJson(s.Watcher, s)
+		if err != nil {
+			return errs.WithEF(err, s.fields, "Failed to read watcher")
+		}
+		logs.WithF(watcher.GetFields()).Debug("Watcher loaded")
+		s.typedWatcher = watcher
+		if err := s.typedWatcher.Init(s); err != nil {
+			return errs.WithEF(err, s.fields, "Failed to init watcher")
+		}
+	*/
+
+	for _, wt := range s.watchers {
+		logs.WithF(wt.GetFields()).Debug("Watcher loaded")
+		if err := wt.Init(s); err != nil {
+			return errs.WithEF(err, s.fields, "Failed to init watcher")
+		}
 	}
 
 	if s.ServerCorrelation.Type != "" {
@@ -118,7 +178,8 @@ func (s *Service) Init(router Router, synapse *Synapse) error {
 	}
 
 	if s.Name == "" {
-		s.Name = s.typedWatcher.GetServiceName()
+		//s.Name = s.typedWatcher.GetServiceName()
+		s.Name = s.watchers[0].GetServiceName()
 		s.fields = s.fields.WithField("service", s.Name)
 	}
 
